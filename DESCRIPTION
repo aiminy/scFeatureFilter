@@ -11,11 +11,7 @@ Description: An R implementation of the correlation-based method developed in
     unaffected by systematic noise.
 License: file LICENSE
 LazyData: TRUE
-Depends:
-    R (>= 3.2.3)
-Imports:
-    dplyr,
-    ggplot2,
-    readr
+Depends: R (>= 3.2.3)
+Imports: dplyr (>= 0.5.0), ggplot2 (>= 2.1.0)
 RoxygenNote: 5.0.1
 Suggests: testthat

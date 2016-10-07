@@ -93,66 +93,54 @@
 #' 
 #' @return A list, containing the information of the generated plot.
 
-plot_scatter <- function(data, save = FALSE, display = TRUE, path = ".", filename = "scatter_plot", 
-                         format = "png", density = FALSE, shape = 16, size = 0.5, alpha = 0.5, ...){
+plot_mean_variance <- function(df, density = FALSE, colourByBin = TRUE, ...){
+    if(colourByBin) {
+        pl <- ggplot(df, aes(x = cv, y = mean + 1, colour = factor(bin))) +
+            labs(x ="Coefficient of variation", y = "Mean expression + 1" , color = "Bin") 
+        
+    } else {
+        pl <- ggplot(df, aes(x = cv, y = mean + 1)) +
+            labs(x ="Coefficient of variation", y = "Mean expression + 1") 
+        
+    }
     
-    # plot CV and mean columns from the CV object
-    pl <- ggplot(data, aes(x = CV, y = mean + 1)) +
-        # select point shape and specify aesthetics
-        geom_point(shape = shape, size = size,
-                   alpha = alpha, ...) +
-        # set log10 scale in the y axis
-        scale_y_log10() +
-        # label plot
-        ylab("Mean expression + 1") + xlab("Coefficient of variation")
-    
+    pl <- pl +
+        geom_point(...) +
+        scale_y_log10()
     # add scatter density to plot
-    if (density == TRUE){
+    if (density == TRUE) {
         pl <- pl + geom_density_2d()
     }
-
-    # save or display the plot
-    if (save == TRUE){
-        
-        # save to path
-        ggsave(paste0(filename, ".", format), path = path, device = format)
-    } 
-    if (display == TRUE){
-        
-        # display the plot
-        message("See scatter plot displayed.")
-        pl
-    }
+    
+    return(pl)
 }
 
-#' @rdname plot_scatter
+.getMedianFromDensity <- function(myDens) {
+    temp <- myDens %>%
+        mutate(mcumsum = cumsum(density)) %>%
+        dplyr::filter(mcumsum > last(mcumsum)/2)
+    return(temp$cor_coef[1])
+} 
 
-plot_bins <- function(data, save = FALSE, display = TRUE, path = ".", filename = "bins_plot",
-                      format = "png", shape = 16, alpha = 0.5, size = 0.5, ...){
+plot_correlations_distributions <- function(df, show_median = FALSE) {
     
-    # plot data assigning colors by window
-    pl <- ggplot(data, aes(x = CV, y = mean + 1, colour = factor(data$bin))) +
-        # select point shape and specify aesthetics
-        geom_point(shape = shape, alpha = alpha, size = size, ...) +
-        # set log10 scale in the y axis
-        scale_y_log10() +
-        # label plot
-        ylab("Mean expression + 1") + xlab("Coefficient of variation")
-    
-    # save or display the plot
-    if (save == TRUE){
-        
-        # save to path
-        ggsave(paste0(filename, ".", format), path = path, device = format)
-        
-    } 
-    if (display == TRUE){
-        
-        # display the plot
-        message("See bins plot displayed.")
-        pl   
+    pl <- ggplot() +
+        geom_smooth(data = dplyr::filter(df, window != "top_window"), aes(x = cor_coef, y = density)) +
+        geom_line(  data = dplyr::filter(df, window == "top_window"), aes(x = cor_coef, y = density)) +
+        facet_wrap(~bin, labeller = "label_both") +
+        labs(x = "correlation coeficient")
+    if (show_median) {
+        median_top <- dplyr::filter(df, window == "top_window") %>%
+            group_by(window) %>%
+            summarise_at("density", .getMedianFromDensity)
+        pl <- pl + 
     }
+    
+    return(pl)
 }
+
+
+
 
 #' @rdname plot_scatter
 

@@ -7,7 +7,7 @@
         ))
     }
     
-    firstColumn <-  select(myDataFrame, 1) %>% unlist(use.names = FALSE)
+    firstColumn <-  dplyr::select(myDataFrame, 1) %>% unlist(use.names = FALSE)
     
     if(is.character(firstColumn) | is.factor(firstColumn)) {
         if(any(duplicated(firstColumn))) {

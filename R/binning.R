@@ -39,70 +39,62 @@
 #' the rest of the genes.
 
 extract_top_genes <- function(dataset,
-                              method = c("window_size", "min_expression", "mean_expression"),
-                              parameter){
+                              window_size = NULL,
+                              mean_expression = NULL,
+                              min_expression = NULL
+                              ){
     divided_data <- list()
     expr_values <- data.frame()
     sorted_values <- data.frame()
+ 
+    if (is.null(window_size) & is.null(mean_expression) & is.null(min_expression)) stop("Need to provide one of the following parameter: window_size, mean_expression or min_expression")
 
-    method <- match.arg(method)
+    if (is.numeric(window_size)){
 
-    if (method == "window_size"){
-
-        # the parameter will be the window size
-        window_size <- parameter
         # sort data by mean expression - original row names are lost
         sorted_values <- arrange(dataset, desc(mean))
         # select the top x genes (x=window size selected)
         divided_data$topgenes <- sorted_values[1:window_size, ]
         # assign bin 0 to the top window
-        divided_data[[1]]$bin <- 0
+        divided_data[[1]]$bin <- 1
         # display mean FPKM value of the last gene in the top window
         message(paste("Mean expression of last top gene:",
                       sorted_values[window_size, ]$mean))
         # store the rest of the genes a the second element of the list
         divided_data$restofgenes <- sorted_values[-(1:nrow(divided_data$topgenes)), ]
 
-    } else if (method == "min_expression"){
-
-        # the parameter will be the min expression threshold
-        min_expr_threshold <- parameter
+    } else if (is.numeric(mean_expression)){
+        
+        # select top genes and store in first position of the list
+        divided_data$topgenes <- subset(dataset, dataset$mean > mean_expression)
+        # assign bin 0 to the top window
+        divided_data[[1]]$bin <- 1
+        # display number of genes in the window
+        message(paste("Number of genes in top window:",
+                      nrow(divided_data$topgenes)))
+        # store rest of genes in second position
+        divided_data$restofgenes <- subset(dataset, dataset$mean < mean_expression)
+        
+    } else if (is.numeric(min_expression)){
 
         # extract expression values
-        expr_values <- select(dataset, -mean, -stdev, -CV)
-
+        expr_values <- dplyr::select(dataset, -geneName, -mean, -sd, -cv)
         # select top genes and store in first position of the list
         divided_data$topgenes <- subset(dataset,
-                                        rowSums(expr_values > min_expr_threshold) == ncol(expr_values))
-
+                                        rowSums(expr_values > min_expression) == ncol(expr_values))
         # assign bin 0 to the top window
-        divided_data[[1]]$bin <- 0
-
+        divided_data[[1]]$bin <- 1
         # display number of genes in the window
-        message(paste("Generated top window successfully! Number of genes in top window:",
+        message(paste("Number of genes in top window:",
                       nrow(divided_data$topgenes)))
-
         # store rest of genes in second position
         divided_data$restofgenes <- subset(dataset,
-                                           rowSums(expr_values > min_expr_threshold) != ncol(expr_values))
+                                           rowSums(expr_values > min_expression) != ncol(expr_values))
 
-    } else if (method == "mean_expression"){
 
-        # the parameter will be the mean expression threshold
-        mean_threshold <- parameter
-
-        # select top genes and store in first position of the list
-        divided_data$topgenes <- subset(dataset, dataset$mean > mean_threshold)
-
-        # assign bin 0 to the top window
-        divided_data[[1]]$bin <- 0
-
-        # display number of genes in the window
-        message(paste("Generated top window successfully! Number of genes in top window:",
-                      nrow(divided_data$topgenes)))
-
-        # store rest of genes in second position
-        divided_data$restofgenes <- subset(dataset, dataset$mean < mean_threshold)
+        
+    } else {
+        stop("The second parameter should be numeric.")
     }
 
     return(divided_data)
@@ -147,45 +139,31 @@ extract_top_genes <- function(dataset,
 #'
 #' @return A data frame containing the binned genes.
 
-bin_scdata <- function(dataset,  method = c("window_number", "window_size"), parameter){
+bin_scdata <- function(dataset, window_number = NULL, window_size = NULL){
 
-    method <- match.arg(method)
+    if (is.null(window_number) & is.null(window_size)) stop("Need to provide window_number or window_size.")
 
-    # save row names
-    dataset[[2]]$rownames <- rownames(dataset$restofgenes)
-
-    # classify data into windows
-    if (method == "window_number"){
-
+    if (is.numeric(window_number)){
         # bin into the selected number of windows
-        windows <- ntile(desc(dataset[[2]]$mean), parameter)
-
-    } else if (method == "window_size"){
+        windows <- ntile(desc(dataset[[2]]$mean), window_number) + 1
+    } else if (is.numeric(window_size)){
         # calculate number of windows of selected window size possible and bin
-        windows <- ntile(desc(dataset[[2]]$mean), trunc(nrow(dataset$restofgenes)/parameter))
+        windows <- ntile(desc(dataset[[2]]$mean), trunc(nrow(dataset$restofgenes)/window_size)) + 1
+    } else {
+        stop("The second parameter should be numeric.")
     }
-
-    # add new column indicating the window in which each gene falls
     dataset$restofgenes <- mutate(dataset$restofgenes, bin = windows)
-    # set row names again
-    rownames(dataset$restofgenes) <- dataset[[2]]$rownames
-    # delete row names column
-    dataset$restofgenes <- select(dataset$restofgenes, -rownames)
 
-    if (method == "window_number"){
-
+    if (is.numeric(window_number)){
         # print size of the desired number of windows created
-        message(paste("Binned data successfully! Size of windows:", nrow(subset(dataset[[2]], bin == 1))))
-
-    } else if (method == "window_size"){
-
+        message(paste("Window size:", length(which(dataset[[2]]$bin == 2))))
+    } else if (is.numeric(window_size)){
         # print number of windows of desired size created
-        message(paste("Binned data successfully! Number of windows:", max(dataset[[2]]$bin)))
+        message(paste("Number of windows:", max(dataset[[2]]$bin)))
     }
 
     # bind all the data and correct bin number
-    dataset <- do.call("rbind", dataset) %>% as.data.frame()
-    dataset$bin <- dataset$bin + 1
-
+    dataset <- dplyr::bind_rows(dataset) %>% 
+        dplyr::select(geneName, mean, sd, cv, bin, everything())
     return(dataset)
 }

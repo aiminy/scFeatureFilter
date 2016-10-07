@@ -18,20 +18,12 @@
 #'
 #' @return A matrix containing a sample of randomized values of the top window.
 
-randomize_top <- function(dataset){
+randomize_top <- function(myMatrix){
 
-    # extract only expression values from the topgenes data frame ("$" subsetting of the dataset)
-    top_expression <- data.frame(dataset$topgenes)
-    top_expression <- select(top_expression, -mean, -stdev, -CV, -bin)
-
-    # create a new data frame to store the randomized top window
+    # iterate the top window row wise and shuffle it
     random_window <- list()
-
-    # iterate the top window row wise, shuffle it and store it in the equivalent row
-    # of the empty data frame
-    for(i in seq_len(nrow(top_expression))){
-
-        random_window[[i]] <- top_expression[i,][,sample(ncol(top_expression))]
+    for(i in seq_len(nrow(myMatrix))){
+        random_window[[i]] <- myMatrix[i, ][, sample(ncol(top_expression))]
         colnames(random_window[[i]]) <- seq_len(ncol(random_window[[i]]))
     }
 
