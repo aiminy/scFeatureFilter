@@ -115,105 +115,71 @@ plot_mean_variance <- function(df, density = FALSE, colourByBin = TRUE, ...){
     return(pl)
 }
 
-.getMedianFromDensity <- function(myDens) {
-    temp <- myDens %>%
-        mutate(mcumsum = cumsum(density)) %>%
-        dplyr::filter(mcumsum > last(mcumsum)/2)
-    return(temp$cor_coef[1])
-} 
 
-plot_correlations_distributions <- function(df, show_median = FALSE) {
+plot_correlations_distributions <- function(df, metrics = NULL, vlines = c("median", "mean"), facet_ncol = 4) {
+    
+    vlines <- match.arg(vlines)
     
     pl <- ggplot() +
-        geom_smooth(data = dplyr::filter(df, window != "top_window"), aes(x = cor_coef, y = density)) +
-        geom_line(  data = dplyr::filter(df, window == "top_window"), aes(x = cor_coef, y = density)) +
-        facet_wrap(~bin, labeller = "label_both") +
-        labs(x = "correlation coeficient")
-    if (show_median) {
-        median_top <- dplyr::filter(df, window == "top_window") %>%
-            group_by(window) %>%
-            summarise_at("density", .getMedianFromDensity)
+        geom_smooth(data = dplyr::filter(df, window != "top_window"), aes(x = cor_coef, y = density), span = 0.8) +
+        geom_line(  data = dplyr::filter(df, window == "top_window"), aes(x = cor_coef, y = density, color = factor(bin))) +
+        facet_wrap(~bin, labeller = "label_both", ncol = facet_ncol) +
+        labs(x = "correlation coeficient") +
+        guides(color = FALSE)
+    if (!is.null(metrics)) {
+        
+        metrics <- dplyr::select_(metrics, "bin", "window", vlines) %>%
+            rename_(metric = vlines) %>%
+            mutate(window = sub("_[0-9]+$", "", window)) %>%
+            group_by(bin, window) %>%
+            summarise(metric = median(abs(metric)))
+        
         pl <- pl + 
+            geom_vline(
+                data = dplyr::filter(metrics, window == "top_window"),
+                aes(xintercept = metric, color = factor(bin)),
+                linetype = "dashed"
+            ) +
+            geom_vline(
+                data = dplyr::filter(metrics, window != "top_window"),
+                aes(xintercept = metric),
+                linetype = "dashed"
+            ) 
     }
     
     return(pl)
 }
 
-
-
-
-#' @rdname plot_scatter
-
-plot_cor_dens <- function(data, save = FALSE, display = TRUE, path = ".", filename = NULL, 
-                          format = "png", window, ribbon_col = "grey", ribbon_alpha = 0.2, 
-                          ..., curve_cols = c("black", "red")){
+plot_metric <- function(metricsTable, metric = c("median", "mean")) {
     
-    # make label for the window that is being plotted
-    window_label <- paste("Window", window)
+    metric <- match.arg(metric)
     
-    # create empty plot
-    pl <- ggplot() +
-        # plot error cruves as a ribbon
-        geom_ribbon(aes(x = data$control_x, ymin = data$min_control_y,
-                        ymax = data$max_control_y), color = ribbon_col, alpha = ribbon_alpha) +
-        # plot random negative control curve
-        geom_line(data = data, aes(x = control_x, y = control_y, color = "Control"), ...) +
-        # plot data correlation density curve
-        geom_line(data = data, aes(x = data_x, y = data_y, color = window_label), ...) +
-        # label plot
-        ylab("Density") + xlab("Absolute value of correlation") +
-        # set colours and labels for the curves
-        theme_bw() + scale_color_manual(values = curve_cols,
-                                        labels = c("Control", window_label))
+    metricsTable <- data_frame(
+        bin = unique(metricsTable$bin),
+        top_window = dplyr::filter(metricsTable, window == "top_window") %>%
+            dplyr::select_(metric) %>%
+            unlist,
+        ctrl_window_median = dplyr::filter(metricsTable, window != "top_window") %>%
+            dplyr::rename_(metric = metric) %>%
+            dplyr::select(bin, metric) %>%
+            dplyr::group_by(bin) %>%
+            dplyr::summarise(med = median(metric)) %>%
+            select(med) %>%
+            unlist,
+        ctrl_window_sd = dplyr::filter(metricsTable, window != "top_window") %>%
+            dplyr::rename_(metric = metric) %>%
+            dplyr::select(bin, metric) %>%
+            dplyr::group_by(bin) %>%
+            dplyr::summarise(med = sd(metric)) %>%
+            select(med) %>%
+            unlist,
+        diff = top_window - ctrl_window_median
+    ) 
     
-    # save or display the plot
-    if (save == TRUE){
-        
-        if (is.null(filename)){
-            
-            # if filename is null, use window label
-            ggsave(paste0(window_label, ".", format), path = path, device = format)
-            
-        } else {
-            
-            # if it is provided, use name
-            ggsave(paste0(filename, ".", format), path = path, device = format)
-        }
-    } 
-    if (display == TRUE){
-        
-        # display the plot
-        message(paste("See density plot for", window_label, "displayed.", sep = " "))
-        pl   
-    }
-}
-
-#' @rdname plot_scatter
-
-plot_histogram <- function(data, save = FALSE, display = TRUE, path = ".", filename = "histogram",
-                           format = "png", title, ylim = 1, ...){
+    p <- ggplot(metricsTable, aes(x = bin, y = diff, fill = factor(bin))) +
+        geom_bar(stat = "identity") +
+        geom_errorbar(aes(ymin = diff - ctrl_window_sd, ymax = diff + ctrl_window_sd), width = 0.5) +
+        guides(fill = FALSE) +
+        labs(ylab = "Actual - randomisation")
     
-    # create plot with histogram values provided and set window numbers in the x axis
-    pl <- ggplot(data, aes(x = factor(as.numeric(rownames(data))),
-                                      y = hist_value, fill = "")) +
-        geom_bar(position = position_dodge(), stat="identity", ...) + 
-        # label plot
-        ylab("Proportion of correlated genes") + xlab("Window number") +
-        # set title and y axis limit
-        ggtitle(title) + ylim(0, ylim) +
-        # add error bars
-        geom_errorbar(aes(ymax = error_up, ymin = error_down), width = 0.2)
-    
-    if (save == TRUE){
-        
-        # save to path
-        ggsave(paste0(filename, ".", format), path = path, device = format)
-        
-    } 
-    if (display == TRUE){
-        
-        # display the plot
-        message("See histogram displayed.")
-        pl   
-    }
 }
