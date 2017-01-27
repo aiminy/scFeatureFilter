@@ -150,7 +150,16 @@ plot_correlations_distributions <- function(df, metrics = NULL, vlines = c("medi
     return(pl)
 }
 
-plot_metric <- function(metricsTable, metric = c("median", "mean")) {
+plot_metric <- function(
+    metricsTable,
+    exp_decay_output = NULL,
+    show_threshold = FALSE,
+    metric = c("median", "mean"),
+    model_color = "blue",
+    threshold = 0.1,
+    threshold_color = "red",
+    line_size = 1
+) {
     
     metric <- match.arg(metric)
     
@@ -180,6 +189,29 @@ plot_metric <- function(metricsTable, metric = c("median", "mean")) {
         geom_bar(stat = "identity") +
         geom_errorbar(aes(ymin = diff - ctrl_window_sd, ymax = diff + ctrl_window_sd), width = 0.5) +
         guides(fill = FALSE) +
-        labs(ylab = "Actual - randomisation")
+        labs(y = "Actual - randomisations")
     
+    if (!is.null(exp_decay_output)) {
+        mm <- coef(exp_decay_output)
+        mf <- function(x) mm[1] + mm[2] * exp(mm[3] * x)
+        
+        p <- p +
+            stat_function(fun = mf, linetype = "dotted", color = model_color, size = line_size) +
+            labs(title = paste0(
+                "",
+                round(mm[1], digits = 3),
+                " + ",
+                round(mm[2], digits = 3),
+                " x exp(",
+                round(mm[3], digits = 3),
+                " x bin)"
+            ))
+        
+        if (show_threshold) {
+            p <- p+
+                geom_hline(yintercept = mm[1] + (mf(1) - mm[1]) * threshold, linetype = "dashed", color = threshold_color, size = line_size)
+        }
+    }
+    
+    return(p)
 }
